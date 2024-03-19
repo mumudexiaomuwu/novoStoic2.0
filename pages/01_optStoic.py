@@ -9,8 +9,10 @@ import json
 import pickle
 import sys 
 import joblib
+import ast
+from math import gcd
 
-sys.path.append('./../data/CC/')
+sys.path.append('./../dGPredictor/CC/')
 
 import chemaxon
 from chemaxon import *
@@ -22,32 +24,32 @@ from rdkit import Chem
 
 @st.cache_data
 def load_smiles():
-    db = pd.read_csv('./../data/cache_compounds_20160818.csv',
+    db = pd.read_csv('./../dGPredictor/data/cache_compounds_20160818.csv',
                      index_col='compound_id')
     db_smiles = db['smiles_pH7'].to_dict()
-    return db_smiles
+    db_inchi = db_inchi = db['inchi'].to_dict()
+    db_atom_bag = db['atom_bag'].to_dict()
+    db_hydrogen = {}
+    for i in db_atom_bag:
+        db_hydrogen[i]=kegg_hydrogen(db_atom_bag[i])
+    
+    return db_smiles,db_inchi,db_hydrogen
+
 
 @st.cache_data
-def load_inchi():
-    db = pd.read_csv('./../data/cache_compounds_20160818.csv',
-                     index_col='compound_id')
-    db_inchi = db['inchi'].to_dict()
-    return db_inchi
-    
-@st.cache_data
 def load_molsig_rad1():
-    molecular_signature_r1 = json.load(open('./../data/decompose_vector_ac.json'))
+    molecular_signature_r1 = json.load(open('./../dGPredictor/data/decompose_vector_ac.json'))
     return molecular_signature_r1
 
 @st.cache_data
 def load_molsig_rad2():
     molecular_signature_r2 = json.load(
-        open('./../data/decompose_vector_ac_r2_py3_indent_modified_manual.json'))
+        open('./../dGPredictor/data/decompose_vector_ac_r2_py3_indent_modified_manual.json'))
     return molecular_signature_r2
 
 @st.cache_data
 def load_model():
-    filename = './../data/models/dGpredictor//model/M12_model_BR.pkl'
+    filename = './../dGPredictor/model/M12_model_BR.pkl'
     loaded_model = joblib.load(open(filename, 'rb'))
     return loaded_model
 
@@ -58,33 +60,44 @@ def load_compound_cache():
 
 @st.cache_data
 def load_metab_df():
-    metab_df = pd.read_csv("./../data/optStoic/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
+    metab_df = pd.read_csv("./metanetx_new_final/metanetx/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
     return metab_df
 
 @st.cache_data
 def load_sij_dict():
-    sij_dict = json.load(open("./../data/metanetx_new_final/metanetx/metanetx_sij_final.json"))
+    sij_dict = json.load(open("./metanetx_new_final/metanetx/metanetx_sij_final.json"))
     return sij_dict
 
 @st.cache_data
 def load_metab_detail_dict():
-    metab_detail_dict = json.load(open("./../data/optStoic/metab_detail_dict_final.json"))
+    metab_detail_dict = json.load(open("./metanetx_new_final/metab_detail_dict_final.json"))
     return metab_detail_dict
 
 @st.cache_data
 def load_met_2_kegg():
-    met_2_kegg = json.load(open("./../data/optStoic/met_2_kegg.json"))
+    met_2_kegg = json.load(open("./metanetx_new_final/met_2_kegg.json"))
     return met_2_kegg
 
 @st.cache_data
 def load_kegg_2_met():
-    kegg_2_met = json.load(open("./../data/optStoic/kegg_2_met.json"))
+    kegg_2_met = json.load(open("./metanetx_new_final/kegg_2_met.json"))
     return kegg_2_met
 
 @st.cache_data
 def load_allow_moiety_dict():
-    allow_moiety_dict = json.load(open("./../data/optStoic/allow_moiety_dict.json"))
+    allow_moiety_dict = json.load(open("./metanetx_new_final/allow_moiety_dict.json"))
     return allow_moiety_dict
+
+def kegg_hydrogen(atom_bag):
+    p = atom_bag
+    p = p.replace("u","")
+    p = ast.literal_eval(p)
+    val = 0
+    if "H" in p:
+        return p['H']
+    else:
+        return val
+    
 
 def count_substructures(radius, molecule):
     """Helper function for get the information of molecular signature of a
@@ -220,7 +233,7 @@ def get_alt_mean(loaded_model):
 def optimal_stoic(reactant,product,add_info):
     substrate = reactant # glucose
     pdt = [product] #acetate
-    allow = ['WATER','MNXM3','MNXM8','MNXM10','MNXM738702','MNXM5','MNXM735438','MNXM40333','MNXM9','MNXM727276','MNXM13','MNXM01','MNXM1108018','MNXM728294','MNXM11','MNXM729302']
+    allow = ['WATER','MNXM3','MNXM8','MNXM10','MNXM738702','MNXM5','MNXM735438','MNXM40333','MNXM9','MNXM727276','MNXM13','MNXM1','MNXM1108018','MNXM728294','MNXM11','MNXM729302']
 
     
     #st.write("Len of add_info = ", len(add_info))
@@ -232,11 +245,13 @@ def optimal_stoic(reactant,product,add_info):
     metab_df = load_metab_df()
     metab_df.loc["MNXM9"] = ['phosphate', 'HO4P',-2.0,95.96234,'InChI=1S/H3O4P/c1-5(2,3)4/h(H3,1,2,3,4)/p-2',
                                     'InChIKey=NBIIXXVUZAFLBC-UHFFFAOYSA-L', 'O=P([O-])([O-])O', 'chebi:43474']
+    metab_df.loc["MNXM1"] = ['H(+)', 'H',1.0,1.00794,'InChI=1S/p+1',
+                                    'InChIKey=GPRLSGONYQIRFK-UHFFFAOYSA-N', '[H+]', 'mnx:PROTON']
     separate = ['MNXM3']
     #[NADH, NAD+], [NADPH, NADP+], 
     pairs = [['MNXM10','MNXM8'],['MNXM738702','MNXM5']]
     #[ATP,ADP],[ATP,AMP], [H+,NAD+], [H+,NADP+], [dips,AMP], [phos,ADP]
-    cond_pairs = [['MNXM3', 'MNXM40333'],['MNXM3','MNXM728294'],['MNXM01','MNXM8'], ['MNXM01','MNXM5'], ['MNXM11','MNXM728294'], ['MNXM9','MNXM40333']]
+    cond_pairs = [['MNXM3', 'MNXM40333'],['MNXM3','MNXM728294'],['MNXM1','MNXM8'], ['MNXM1','MNXM5'], ['MNXM11','MNXM728294'], ['MNXM9','MNXM40333']]
     #[ATP,ADP,AMP]
     cond_threes = [['MNXM3', 'MNXM40333', 'MNXM728294']]
 
@@ -254,8 +269,8 @@ def optimal_stoic(reactant,product,add_info):
     mets = list(metab_detail_dict.keys())
     elems = list(metab_detail_dict['MNXM8'].keys())
 
-    db_smiles = load_smiles()
-    db_inchi = load_inchi()
+    db_smiles, db_inchi, db_hydrogen = load_smiles()
+    #db_inchi = load_inchi()
     molsig_r1 = load_molsig_rad1()
     molsig_r2 = load_molsig_rad2()
 
@@ -371,6 +386,8 @@ def optimal_stoic(reactant,product,add_info):
 
 
     while pulp.LpStatus[lp_prob.status] == 'Optimal':
+        if itr>=10:
+            break
         itr+=1
         int_cut_ids = []
         int_cut_vals = []
@@ -410,24 +427,131 @@ def optimal_stoic(reactant,product,add_info):
         st.write('\n')
         soln_react_dict = {}
         soln_prod_dict = {}
+
+        soln_react_dict_int = {}
+        soln_prod_dict_int = {}
+        #soln_react_kegg_hydrogen = 0
+        soln_kegg_hydrogen = 0
+        soln_met_hydrogen = 0
+        count = ''
+        for id,val in soln_dict.items():
+            if "MNXM" in id or "WATER" in id:
+                if id in met_2_kegg:
+                    if met_2_kegg[id] in db_hydrogen:
+                        soln_kegg_hydrogen += stoi_vars[id].varValue*db_hydrogen[met_2_kegg[id]]
+                    else:
+                        count+=id+' // '
+                        soln_kegg_hydrogen += stoi_vars[id].varValue*metab_detail_dict[id]['H']
+                else:
+                    soln_kegg_hydrogen += stoi_vars[id].varValue*metab_detail_dict[id]['H']
+                    
+                soln_met_hydrogen += stoi_vars[id].varValue*metab_detail_dict[id]['H']          
+            else:
+                st.write(id)
+                st.write("Generate molecular formula from this novel molecule")
+
+        #st.write("H+ val = ",stoi_vars['MNXM1'].varValue)
+        #st.write("Sum of all kegg hydrogen = ",soln_kegg_hydrogen)
+        #st.write("Summ of all met hydrogen = ",soln_met_hydrogen)
+        #st.write("Molecules which are in kegg but not in db_kegg list = ",count)
+
+        big_eps = 0.09
+        a = []
+        for id in soln_dict:
+            flag_2 = 0
+            #st.write("In the soln dict list = ", id)
+            #st.write("****")
+            #num = 1
+            temp_val = stoi_vars[id].varValue
+            if id=='MNXM1':
+                temp_val -= soln_kegg_hydrogen
+            
+            for num in range(1,101):
+                #st.write("Num = ",num)
+                #st.write("Num temp val = ",num*temp_val)
+                #st.write("Num round temp val =",round(num*(temp_val)))
+                #st.write("diff = ",abs(num*temp_val-round(num*(temp_val))))
+                if abs(num*temp_val-round(num*(temp_val)))<=big_eps:
+                    a.append(num)
+                    flag_2 = 1
+                    #st.write(id)
+                    #st.write("temp val = ",temp_val)
+                    #st.write("round temp val = ", round(temp_val))
+                    #st.write("////")
+                    break
+            if flag_2==0:
+                a.append(num)
+                
+        
+        #a = [100, 200, 150]   #will work for an int array of any length
+        lcm = 1
+        for i in a:
+            lcm = lcm*i//gcd(lcm, i)
+
+        soln_dict_int = {}
+        for id in soln_dict:
+            if id=='MNXM1':
+                temp_val = stoi_vars[id].varValue - soln_kegg_hydrogen
+            else:
+                temp_val = stoi_vars[id].varValue
+            temp_val *= lcm
+            soln_dict_int[id] = str(round(temp_val,2))
+                
+        eps = 1E-4
+        if abs(soln_kegg_hydrogen) > eps:
+            temp_val = str(stoi_vars['MNXM1'].varValue - soln_kegg_hydrogen)
+            if len(temp_val)>5:
+                val = temp_val[:5]
+            else:
+                val = temp_val
+            soln_dict['MNXM1']=val
         for id,val in soln_dict.items():
             if float(val)<0:
                 soln_react_dict[id]=val
             else:
                 soln_prod_dict[id]=val
 
-        to_print_sol = ''
-        for id,val in soln_react_dict.items():
-            to_print_sol+=val+' '+metab_df_name[id]
-            to_print_sol+=' '+'+'+' '
-        to_print_sol+=' '+'----->'+' '
-        for id,val in soln_prod_dict.items():
-            to_print_sol+=val+' '+metab_df_name[id]
-            to_print_sol+=' '+'+'+' '
+        for id,val in soln_dict_int.items():
+            if float(val)<0:
+                soln_react_dict_int[id]=val
+            else:
+                soln_prod_dict_int[id]=val
             
         
+        
+        to_print_sol = ''
+        to_print_sol_int = ''
+        
+        for id,val in soln_react_dict.items():
+            if "MNXM" in id or "WATER" in id:
+                to_print_sol+=val+' '+metab_df_name[id]
+                to_print_sol+=' '+'+'+' '  
+                to_print_sol_int+=soln_react_dict_int[id]+' '+metab_df_name[id]
+                to_print_sol_int+=' '+'+'+' '
+            else:
+                st.write(id)
+                st.write("Generate molecular formula from this novel molecule")
+                
+            
+        to_print_sol+=' '+'----->'+' '
+        to_print_sol_int+=' '+'----->'+' '
+        for id,val in soln_prod_dict.items():
+            if "MNXM" in id or "WATER" in id:
+                to_print_sol+=val+' '+metab_df_name[id]
+                to_print_sol+=' '+'+'+' '
+                to_print_sol_int+=soln_prod_dict_int[id]+' '+metab_df_name[id]
+                to_print_sol_int+=' '+'+'+' '
+
+            else:
+                st.write(id)
+                st.write("Generate molecular formula from this novel molecule")
+        #st.write("Found LCM of this list = ", a)
+        #st.write("LCM = ", lcm)
+       
         with st.container(border=True):
-            st.markdown(to_print_sol[:-2])
+            #st.write("Actual hydrogen = ", temp_val_float)
+            st.markdown(to_print_sol_int[:-2])
+       
         #st.write(to_print_sol)       
         st.write('\n---------------------------------------------\n')
     
@@ -443,6 +567,8 @@ def optimal_stoic(reactant,product,add_info):
         
         lp_prob.solve(pulp_solver)
 
+    
+         
 
 
 
@@ -456,7 +582,7 @@ def main():
             'product', value='MNXM26')
     
     
-    if st.checkbox('If metabolite not in KEGG'):
+    if st.checkbox('If metabolite not in KEGG or MetaNetX'):
             # st.subheader('test')
         add_info = st.text_area('Additional information (id: SMILES):',
                                 '{"N00001":"CC(=O)O"}')
