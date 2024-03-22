@@ -49,7 +49,7 @@ def load_molsig_rad2():
 
 @st.cache_data
 def load_model():
-    filename = './../dGPredictor/model/M12_model_BR.pkl'
+    filename = './../models/dGPredictor/M12_model_BR.pkl'
     loaded_model = joblib.load(open(filename, 'rb'))
     return loaded_model
 
