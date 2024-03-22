@@ -12,7 +12,7 @@ import joblib
 import ast
 from math import gcd
 
-sys.path.append('./../dGPredictor/CC/')
+sys.path.append('./../data/CC/')
 
 import chemaxon
 from chemaxon import *
@@ -24,7 +24,7 @@ from rdkit import Chem
 
 @st.cache_data
 def load_smiles():
-    db = pd.read_csv('./../data/CC/data_cc/cache_compounds_20160818.csv',
+    db = pd.read_csv('./../data/cache_compounds_20160818.csv',
                      index_col='compound_id')
     db_smiles = db['smiles_pH7'].to_dict()
     db_inchi = db_inchi = db['inchi'].to_dict()
@@ -38,13 +38,13 @@ def load_smiles():
 
 @st.cache_data
 def load_molsig_rad1():
-    molecular_signature_r1 = json.load(open('./../data/CC/data_cc/decompose_vector_ac.json'))
+    molecular_signature_r1 = json.load(open('./../data/decompose_vector_ac.json'))
     return molecular_signature_r1
 
 @st.cache_data
 def load_molsig_rad2():
     molecular_signature_r2 = json.load(
-        open('./../data/CC/data_cc/decompose_vector_ac_r2_py3_indent_modified_manual.json'))
+        open('./../data/decompose_vector_ac_r2_py3_indent_modified_manual.json'))
     return molecular_signature_r2
 
 @st.cache_data
@@ -160,8 +160,8 @@ def get_rule(rxn_dict, molsig1, molsig2, novel_decomposed1, novel_decomposed2):
     all_mets2.append("C00080")
     all_mets2.append("C00282")
 
-    moieties_r1 = open('./../data/CC/data_cc/group_names_r1.txt')
-    moieties_r2 = open('./../data/CC/data_cc/group_names_r2_py3_modified_manual.txt')
+    moieties_r1 = open('./../data/group_names_r1.txt')
+    moieties_r2 = open('./../data/group_names_r2_py3_modified_manual.txt')
     moie_r1 = moieties_r1.read().splitlines()
     moie_r2 = moieties_r2.read().splitlines()
 
