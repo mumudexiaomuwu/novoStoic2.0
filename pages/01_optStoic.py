@@ -148,32 +148,32 @@ def load_compound_cache():
 
 @st.cache_data
 def load_metab_df():
-    metab_df = pd.read_csv("./../data/optStoic/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
+    metab_df = pd.read_csv("./../metanetx/data_final/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
     return metab_df
 
 @st.cache_data
 def load_sij_dict():
-    sij_dict = json.load(open("./../data/optStoic/metanetx_sij_final.json"))
+    sij_dict = json.load(open("../../metanetx/data_final/metanetx_sij_final.json"))
     return sij_dict
 
 @st.cache_data
 def load_metab_detail_dict():
-    metab_detail_dict = json.load(open("./../data/optStoic/metab_detail_dict_final.json"))
+    metab_detail_dict = json.load(open("./../metanetx/data_final/metab_detail_dict_final.json"))
     return metab_detail_dict
 
 @st.cache_data
 def load_met_2_kegg():
-    met_2_kegg = json.load(open("./../data/optStoic/met_2_kegg.json"))
+    met_2_kegg = json.load(open("./../metanetx/data_final//met_2_kegg.json"))
     return met_2_kegg
 
 @st.cache_data
 def load_kegg_2_met():
-    kegg_2_met = json.load(open("./../data/optStoic/kegg_2_met.json"))
+    kegg_2_met = json.load(open("./../metanetx/data_final/kegg_2_met.json"))
     return kegg_2_met
 
 @st.cache_data
 def load_allow_moiety_dict():
-    allow_moiety_dict = json.load(open("./../data/optStoic/allow_moiety_dict.json"))
+    allow_moiety_dict = json.load(open("./../metanetx/data_final/allow_moiety_dict.json"))
     return allow_moiety_dict
 
 def kegg_hydrogen(atom_bag):
@@ -248,8 +248,8 @@ def get_rule(rxn_dict, molsig1, molsig2, novel_decomposed1, novel_decomposed2):
     all_mets2.append("C00080")
     all_mets2.append("C00282")
 
-    moieties_r1 = open('./../data/group_names_r1.txt')
-    moieties_r2 = open('./../data/group_names_r2_py3_modified_manual.txt')
+    moieties_r1 = open('./../dGPredictor/data/group_names_r1.txt')
+    moieties_r2 = open('./../dGPredictor/data/group_names_r2_py3_modified_manual.txt')
     moie_r1 = moieties_r1.read().splitlines()
     moie_r2 = moieties_r2.read().splitlines()
 
@@ -315,6 +315,33 @@ def get_alt_mean(loaded_model):
     #final_ymean = np.sum(X[0]*alt_ymean)
     #print("Manually calculated mean = ",final_ymean)
     return list(alt_ymean)
+
+def get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2, novel_mets):
+
+    # rule_df = get_rxn_rule(rid)
+    rule_comb, rule_df1, rule_df2 = get_rule(
+        rxn_dict, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2)
+
+    X = rule_comb
+
+    ymean, ystd = loaded_model.predict(X, return_std=True)
+
+    conf_int = (1.96*ystd[0])/np.sqrt(4001)
+
+    # result['dG0'] = ymean[0] + get_ddG0(rxn_dict, pH, I)
+    # result['standard deviation'] = ystd[0]
+
+    # result_df = pd.DataFrame([result])
+    # result_df.style.hide_index()
+    # return result_df
+    return ymean[0],  conf_int
+
+def get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2):
+    #rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2, novel_mets
+    mu, std = get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, [], [], [])
+
+    
+    return mu-std,mu+std
 
     
 
@@ -473,7 +500,7 @@ def optimal_stoic(reactant,product,add_info):
 
     lp_prob += bin_vars['MNXM10']==1
 
-    lp_prob += stoi_vars[pdt[0]]<=1, 'suboptimal'
+    lp_prob += stoi_vars[pdt[0]]<=math.floor(metab_detail_dict[pdt[0]]['C']/metab_detail_dict[substrate]['C']), 'suboptimal'
 
     lp_prob += bin_vars['MNXM9']==0, 'phosphate'
     
@@ -495,10 +522,14 @@ def optimal_stoic(reactant,product,add_info):
 
     prev_itr=0
 
-    # Define the folder path
-    folder_path = './../Results/optStoic_solutions/'+pdt[0]+'/int_cut_ids/''
-    print(folder_path)
-    print(os.listdir(folder_path))
+    folder_path = './../Results/'+pdt[0]+'/int_cut_ids'
+    #folder_path = os.path.join(os.getcwd(), folder_path)
+    
+    #st.write(folder_path)
+    if not os.path.exists(folder_path): 
+        os.makedirs(folder_path)
+    
+    #st.write(os.listdir(folder_path))
     # Iterate through all files in the folder
     for filename in os.listdir(folder_path):
         #print(filename)
@@ -518,16 +549,19 @@ def optimal_stoic(reactant,product,add_info):
                 #st.write(file_content)
                 length = len(file_content_list) - 1
                 #total_vals = sum(int_cut_vals) - 1
-                lp_prob += (pulp.lpSum([bin_vars[r] for r in file_content_list]) <= length, "integer_cut_" + str(prev_itr))
+                #lp_prob += (pulp.lpSum([bin_vars[r] for r in file_content_list]) <= length, "integer_cut_" + str(prev_itr))
                
                     
                     
-              
+    file_kegg = open('./../Results/'+pdt[0]+'/kegg_solns.txt', 'w')      
+    file_met = open('./../Results/'+pdt[0]+'/met_solns.txt', 'w')
 
 
     while pulp.LpStatus[lp_prob.status] == 'Optimal':
         st.write("Found optimal")
-        if itr>=20:
+        if itr>=30:
+            #file_kegg.close()
+            #file_met.close()
             break
         
         itr+=1
@@ -539,30 +573,30 @@ def optimal_stoic(reactant,product,add_info):
         #print("Started wriri\n")
         soln_dict = {}
         rxn_dict = {}
+        #rxn_dict_info = {}
         for id in allow:
             if stoi_vars[id].varValue != 0:
                 #st.write(str(id)+" = "+ str(stoi_vars[id].varValue)+" and "+ str(bin_vars[id].varValue))
                 #id = str(v.name).split('_')[1]
                 soln_dict[id]=stoi_vars[id].varValue
                 if id in met_2_kegg:
-                    rxn_dict[met_2_kegg[id]] = soln_dict[id]
+                    rxn_dict[met_2_kegg[id]] = round(soln_dict[id])
                 else:
-                    rxn_dict[id] = soln_dict[id]
+                    rxn_dict[id] = round(soln_dict[id])
+                        
                     
                 int_cut_ids.append(id)
                 int_cut_vals.append(bin_vars[id].varValue)
                 #st.write('\n')
-
-
-        dG_val_lower, dG_val_upper = get_lower_limit(rxn_dict, add_info, rid, pH, I, loaded_model, molsig_r1, molsig_r2)
+        rid=pdt[0]
+        pH=7.0
+        I=0.1
+        dG_val_lower, dG_val_upper = get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2)
 
         #if dG_val_lower <= 5.0
         st.write("Theoretical yield = {}\n".format(obj))
         
     
-        st.write('\n')
-
-        st.write('\n')
         soln_react_dict = {}
         soln_prod_dict = {}
 
@@ -575,7 +609,19 @@ def optimal_stoic(reactant,product,add_info):
         #numbers = list(soln_dict_abs.values())
         #integer_list, factor = convert_to_integer(numbers)
         #st.write("Factor = ", factor)
-       
+        net_hydrogen = 0
+
+        for id,val in soln_dict.items():
+            temp_H = int(val)*metab_detail_dict[id]['H']
+            temp_H+=net_hydrogen
+
+        if 'MNXM1' in soln_dict:
+            soln_dict['MNXM1'] -= net_hydrogen
+        else:
+            soln_dict['MNXM1'] = -1*net_hydrogen
+
+        if abs(soln_dict['MNXM1'])<1E-3:
+            del soln_dict['MNXM1']
 
         
         for id,val in soln_dict.items():
@@ -585,43 +631,72 @@ def optimal_stoic(reactant,product,add_info):
                 soln_prod_dict[id]=val
                     
         to_print_sol = ''
-        to_print_sol_int = ''
+        to_print_sol_kegg = ''
+        to_print_sol_met = ''
         
         
         for id,val in soln_react_dict.items():
             if "MNXM" in id or "WATER" in id:
                 to_print_sol+=str(round(val,2))[1:]+' '+metab_df_name[id]
-                to_print_sol+=' '+'+'+' '  
-                #to_print_sol_int+=soln_react_dict_int[id]+' '+metab_df_name[id]
-                #to_print_sol_int+=' '+'+'+' '
+                to_print_sol+=' '+'+'+' ' 
             else:
-                st.write("react")
                 #st.write("Generate molecular formula from this novel molecule")
                 to_print_sol+=str(round(val,2))[1:]+' '+id
                 to_print_sol+=' '+'+'+' '
-                #to_print_sol_int+=soln_react_dict_int[id]+' '+id
-                #to_print_sol_int+=' '+'+'+' '
                 
+            to_print_sol_met+=str(round(val,2))[1:]+' '+id
+            to_print_sol_met+=' '+'+'+' '
+            if id in met_2_kegg:
+                to_print_sol_kegg+=str(round(val,2))[1:]+' '+met_2_kegg[id]
+                to_print_sol_kegg+=' '+'+'+' '
+            else:
+                to_print_sol_kegg+=str(round(val,2))[1:]+' '+id
+                to_print_sol_kegg+=' '+'+'+' '
+                
+        
         to_print_sol = to_print_sol[:-2]    
-        to_print_sol+=' '+'----->'+' '
-        #to_print_sol_int+=' '+'----->'+' '
+        to_print_sol+=' '+'<=>'+' '
+
+        to_print_sol_met = to_print_sol_met[:-2]    
+        to_print_sol_met+=' '+'<=>'+' '
+
+        to_print_sol_kegg = to_print_sol_kegg[:-2]    
+        to_print_sol_kegg+=' '+'<=>'+' '
+        
         for id,val in soln_prod_dict.items():
             if "MNXM" in id or "WATER" in id:
                 to_print_sol+=str(round(val,2))+' '+metab_df_name[id]
-                to_print_sol+=' '+'+'+' '
-                #to_print_sol_int+=soln_prod_dict_int[id]+' '+metab_df_name[id]
-                #to_print_sol_int+=' '+'+'+' '
-
+                to_print_sol+=' '+'+'+' ' 
             else:
-                #st.write(id)
                 #st.write("Generate molecular formula from this novel molecule")
                 to_print_sol+=str(round(val,2))+' '+id
                 to_print_sol+=' '+'+'+' '
-                #to_print_sol_int+=soln_prod_dict_int[id]+' '+id
-                #to_print_sol_int+=' '+'+'+' '
-        #st.write("Found LCM of this list = ", a)
-        #st.write("LCM = ", lcm)
-       
+                
+            to_print_sol_met+=str(round(val,2))+' '+id
+            to_print_sol_met+=' '+'+'+' '
+            if id in met_2_kegg:
+                to_print_sol_kegg+=str(round(val,2))+' '+met_2_kegg[id]
+                to_print_sol_kegg+=' '+'+'+' '
+            else:
+                to_print_sol_kegg+=str(round(val,2))+' '+id
+                to_print_sol_kegg+=' '+'+'+' '
+
+        to_print_sol_kegg = to_print_sol_kegg[:-2]
+        to_print_sol_met = to_print_sol_met[:-2]
+        
+
+        dG_print = 'dG range = '+str(round(dG_val_lower))+ ' to '+ str(round(dG_val_upper))+' kJ/mol\n'
+        st.write('dG range = '+str(round(dG_val_lower))+ ' to '+ str(round(dG_val_upper))+' kJ/mol')
+
+        file_kegg.write(dG_print)
+        file_met.write(dG_print)
+
+        file_kegg.write(to_print_sol_kegg)
+        file_met.write(to_print_sol_met)
+
+        file_kegg.write('\n---------------------------------------------\n')
+        file_met.write('\n---------------------------------------------\n')
+        
         with st.container(border=True):
             #st.write("Actual hydrogen = ", temp_val_float)
             st.markdown(to_print_sol[:-2])
@@ -629,7 +704,7 @@ def optimal_stoic(reactant,product,add_info):
 
        
         #st.write(to_print_sol)       
-        st.write('\n---------------------------------------------\n')
+        st.write('---------------------------------------------\n')
     
         length = len(int_cut_ids) - 1
         total_vals = sum(int_cut_vals) - 1
@@ -641,9 +716,7 @@ def optimal_stoic(reactant,product,add_info):
         #lp_prob += (pulp.lpSum([stoi_vars[r] for r in int_cut_ids]) >= total_vals_up,  "integer_cut_up" + str(itr+prev_itr))
         lp_prob += (pulp.lpSum([bin_vars[r] for r in int_cut_ids]) <= total_vals,  "integer_cut" + str(itr+prev_itr))
 
-        with open('./../Results/optStoic_solutions/'+pdt[0]+'/int_cut_ids/'+str(itr+prev_itr)+'.txt', 'w') as f:
-            for line in int_cut_ids:
-                f.write(f"{line}\n")
+        
     
         #eps = 0.02
 
@@ -658,15 +731,29 @@ def optimal_stoic(reactant,product,add_info):
 
         for id,val in soln_dict.items():
             soln_dict_metanetx_id[id]=round(val)
+
+        soln_dict_metanetx_id['dG_Range'] = dG_print
+        #lp_prob += (pulp.lpSum([abs(soln_dict_metanetx_id[id]-round(stoi_vars[id])) for id in allow_moiety_dict]) >= 1 , 'integer_cut_stoi_'+str(itr+prev_itr))
         
-        soln_dict_common_name['dG_lower'] = dG_val_lower
-        soln_dict_common_name['dG_upper'] = dG_val_upper
+        
+        with open('./../Results/'+pdt[0]+'/int_cut_ids/'+str(itr+prev_itr)+'.txt', 'w') as f:
+            for line in int_cut_ids:
+                f.write(f"{line}\n")
+        
         
         lp_prob.solve(pulp_solver)
-        with open('./../Results/optStoic_solutions/'+pdt[0]+'/common_name/soln_dict_common_name'+str(itr+prev_itr)+'.json', "w") as outfile: 
+        folder_path = './../Results/'+pdt[0]+'/common_name'
+        #folder_path = os.path.join(os.getcwd(), folder_path)
+        if not os.path.exists(folder_path): 
+            os.makedirs(folder_path)
+        with open('./../Results/'+pdt[0]+'/common_name/soln_dict_common_name'+str(itr+prev_itr)+'.json', "w") as outfile: 
             json.dump(soln_dict_common_name, outfile, indent=4)
 
-        with open('./../Results/optStoic_solutions/'+pdt[0]+'/metanetx_id/soln_dict_metanetx_id'+str(itr+prev_itr)+'.json', "w") as outfile: 
+        folder_path = './results/'+pdt[0]+'_2'+'/metanetx_id'
+        #folder_path = os.path.join(os.getcwd(), folder_path)
+        if not os.path.exists(folder_path): 
+            os.makedirs(folder_path)      
+        with open('./../Results/'+pdt[0]+'/metanetx_id/soln_dict_metanetx_id'+str(itr+prev_itr)+'.json', "w") as outfile: 
             json.dump(soln_dict_metanetx_id, outfile, indent=4)
     
          
