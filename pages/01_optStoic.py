@@ -341,7 +341,7 @@ def get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2):
     mu, std = get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, [], [], [])
 
     
-    return mu-std,mu+std
+    return mu,std
 
     
 
@@ -591,9 +591,9 @@ def optimal_stoic(reactant,product,add_info):
         rid=pdt[0]
         pH=7.0
         I=0.1
-        dG_val_lower, dG_val_upper = get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2)
+        dG_val_mean, dG_val_std = get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2)
 
-        #if dG_val_lower <= 5.0
+        #if dG_val_mean <= 5.0
         st.write("Theoretical yield = {}\n".format(obj))
         
     
@@ -685,8 +685,8 @@ def optimal_stoic(reactant,product,add_info):
         to_print_sol_met = to_print_sol_met[:-2]
         
 
-        dG_print = 'dG range = '+str(round(dG_val_lower))+ ' to '+ str(round(dG_val_upper))+' kJ/mol\n'
-        st.write('dG range = '+str(round(dG_val_lower))+ ' to '+ str(round(dG_val_upper))+' kJ/mol')
+        dG_print = 'dG range = '+str(round(dG_val_mean))+ ' ± '+ str(round(dG_val_std))+' kJ/mol\n'
+        st.write('dG range = '+str(round(dG_val_mean))+ ' ± '+ str(round(dG_val_std))+' kJ/mol')
 
         file_kegg.write(dG_print)
         file_met.write(dG_print)
