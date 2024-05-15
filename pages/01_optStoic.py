@@ -13,7 +13,7 @@ import ast
 from math import gcd
 import math
 import os
-sys.path.append('./../data/CC/')
+sys.path.append("./data/CC/")
 
 import chemaxon
 from chemaxon import *
@@ -112,7 +112,7 @@ def extract_det(smiles):
 
 @st.cache_data
 def load_smiles():
-    db = pd.read_csv('./../data/cache_compounds_20160818.csv',
+    db = pd.read_csv('./data/cache_compounds_20160818.csv',
                      index_col='compound_id')
     db_smiles = db['smiles_pH7'].to_dict()
     db_inchi = db_inchi = db['inchi'].to_dict()
@@ -126,18 +126,18 @@ def load_smiles():
 
 @st.cache_data
 def load_molsig_rad1():
-    molecular_signature_r1 = json.load(open('./../data/decompose_vector_ac.json'))
+    molecular_signature_r1 = json.load(open('./data/decompose_vector_ac.json'))
     return molecular_signature_r1
 
 @st.cache_data
 def load_molsig_rad2():
     molecular_signature_r2 = json.load(
-        open('./../data/decompose_vector_ac_r2_py3_indent_modified_manual.json'))
+        open('./data/decompose_vector_ac_r2_py3_indent_modified_manual.json'))
     return molecular_signature_r2
 
 @st.cache_data
 def load_model():
-    filename = './../data/models/dGPredictor/M12_model_BR.pkl'
+    filename = './data/models/dGPredictor/M12_model_BR.pkl'
     loaded_model = joblib.load(open(filename, 'rb'))
     return loaded_model
 
@@ -148,32 +148,32 @@ def load_compound_cache():
 
 @st.cache_data
 def load_metab_df():
-    metab_df = pd.read_csv("./../metanetx/data_final/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
+    metab_df = pd.read_csv("./metanetx/data_final/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
     return metab_df
 
 @st.cache_data
 def load_sij_dict():
-    sij_dict = json.load(open("../../metanetx/data_final/metanetx_sij_final.json"))
+    sij_dict = json.load(open("./metanetx/data_final/metanetx_sij_final.json"))
     return sij_dict
 
 @st.cache_data
 def load_metab_detail_dict():
-    metab_detail_dict = json.load(open("./../metanetx/data_final/metab_detail_dict_final.json"))
+    metab_detail_dict = json.load(open("./metanetx/data_final/metab_detail_dict_final.json"))
     return metab_detail_dict
 
 @st.cache_data
 def load_met_2_kegg():
-    met_2_kegg = json.load(open("./../metanetx/data_final//met_2_kegg.json"))
+    met_2_kegg = json.load(open("./metanetx/data_final/met_2_kegg.json"))
     return met_2_kegg
 
 @st.cache_data
 def load_kegg_2_met():
-    kegg_2_met = json.load(open("./../metanetx/data_final/kegg_2_met.json"))
+    kegg_2_met = json.load(open("./metanetx/data_final/kegg_2_met.json"))
     return kegg_2_met
 
 @st.cache_data
 def load_allow_moiety_dict():
-    allow_moiety_dict = json.load(open("./../metanetx/data_final/allow_moiety_dict.json"))
+    allow_moiety_dict = json.load(open("./metanetx/data_final/allow_moiety_dict.json"))
     return allow_moiety_dict
 
 def kegg_hydrogen(atom_bag):
@@ -248,8 +248,8 @@ def get_rule(rxn_dict, molsig1, molsig2, novel_decomposed1, novel_decomposed2):
     all_mets2.append("C00080")
     all_mets2.append("C00282")
 
-    moieties_r1 = open('./../dGPredictor/data/group_names_r1.txt')
-    moieties_r2 = open('./../dGPredictor/data/group_names_r2_py3_modified_manual.txt')
+    moieties_r1 = open('./data/group_names_r1.txt')
+    moieties_r2 = open('./data/group_names_r2_py3_modified_manual.txt')
     moie_r1 = moieties_r1.read().splitlines()
     moie_r2 = moieties_r2.read().splitlines()
 
@@ -499,8 +499,8 @@ def optimal_stoic(reactant,product,add_info):
     lp_prob += stoi_vars['MNXM13']>=0
 
     lp_prob += bin_vars['MNXM10']==1
-
-    lp_prob += stoi_vars[pdt[0]]<=math.floor(metab_detail_dict[pdt[0]]['C']/metab_detail_dict[substrate]['C']), 'suboptimal'
+    #lp_prob += stoi_vars[substrate]==1
+    #lp_prob += stoi_vars[pdt[0]]<=math.floor(metab_detail_dict[substrate]['C']/metab_detail_dict[pdt[0]]['C']), 'suboptimal'
 
     lp_prob += bin_vars['MNXM9']==0, 'phosphate'
     
@@ -512,8 +512,8 @@ def optimal_stoic(reactant,product,add_info):
     #lp_prob += pulp.lpSum([bin_vars[id] for id in allow])<= 10
     
     #Constaint 4 (the reactant stoichiometry is fixed to 1)
-    lp_prob += stoi_vars[substrate] <= -1
-    lp_prob += stoi_vars[substrate] >= -10
+    lp_prob += stoi_vars[substrate] == -1
+    #lp_prob += stoi_vars[substrate] >= -10
     pulp_solver = pulp.CPLEX_CMD(path=None,keepFiles=0, mip=1, msg=1)
     #pulp_solver = pulp.CPLEX_CMD(path=None,keepFiles=0, mip=0, msg=1)
     lp_prob.solve(pulp_solver)
@@ -522,7 +522,7 @@ def optimal_stoic(reactant,product,add_info):
 
     prev_itr=0
 
-    folder_path = './../Results/'+pdt[0]+'/int_cut_ids'
+    folder_path = './Results/optStoic_solutions/'+pdt[0]+'/int_cut_ids'
     #folder_path = os.path.join(os.getcwd(), folder_path)
     
     #st.write(folder_path)
@@ -553,8 +553,8 @@ def optimal_stoic(reactant,product,add_info):
                
                     
                     
-    file_kegg = open('./../Results/'+pdt[0]+'/kegg_solns.txt', 'w')      
-    file_met = open('./../Results/'+pdt[0]+'/met_solns.txt', 'w')
+    file_kegg = open('./Results/optStoic_solutions/'+pdt[0]+'/kegg_solns.txt', 'w')      
+    file_met = open('./Results/optStoic_solutions/'+pdt[0]+'/met_solns.txt', 'w')
 
 
     while pulp.LpStatus[lp_prob.status] == 'Optimal':
@@ -736,24 +736,24 @@ def optimal_stoic(reactant,product,add_info):
         #lp_prob += (pulp.lpSum([abs(soln_dict_metanetx_id[id]-round(stoi_vars[id])) for id in allow_moiety_dict]) >= 1 , 'integer_cut_stoi_'+str(itr+prev_itr))
         
         
-        with open('./../Results/'+pdt[0]+'/int_cut_ids/'+str(itr+prev_itr)+'.txt', 'w') as f:
+        with open('./Results/optStoic_solutions/'+pdt[0]+'/int_cut_ids/'+str(itr+prev_itr)+'.txt', 'w') as f:
             for line in int_cut_ids:
                 f.write(f"{line}\n")
         
         
         lp_prob.solve(pulp_solver)
-        folder_path = './../Results/'+pdt[0]+'/common_name'
+        folder_path = './Results/optStoic_solutions/'+pdt[0]+'/common_name'
         #folder_path = os.path.join(os.getcwd(), folder_path)
         if not os.path.exists(folder_path): 
             os.makedirs(folder_path)
-        with open('./../Results/'+pdt[0]+'/common_name/soln_dict_common_name'+str(itr+prev_itr)+'.json', "w") as outfile: 
+        with open('./Results/optStoic_solutions/'+pdt[0]+'/common_name/soln_dict_common_name'+str(itr+prev_itr)+'.json', "w") as outfile: 
             json.dump(soln_dict_common_name, outfile, indent=4)
 
-        folder_path = './results/'+pdt[0]+'_2'+'/metanetx_id'
+        folder_path = './Results/optStoic_solutions/'+pdt[0]+'/metanetx_id'
         #folder_path = os.path.join(os.getcwd(), folder_path)
         if not os.path.exists(folder_path): 
             os.makedirs(folder_path)      
-        with open('./../Results/'+pdt[0]+'/metanetx_id/soln_dict_metanetx_id'+str(itr+prev_itr)+'.json', "w") as outfile: 
+        with open('./Results/optStoic_solutions/'+pdt[0]+'/metanetx_id/soln_dict_metanetx_id'+str(itr+prev_itr)+'.json', "w") as outfile: 
             json.dump(soln_dict_metanetx_id, outfile, indent=4)
     
          
@@ -761,7 +761,7 @@ def optimal_stoic(reactant,product,add_info):
 
 
 def main():
-
+    st.image('./data/header_image/optStoic_header.png', use_column_width=True)
     st.subheader('Primary reactant & Primary product (Use either KEGG ids or MetaNetX ids)')
     
     reactant = st.text_input(
@@ -770,7 +770,7 @@ def main():
             'product', value='MNXM26')
     
     
-    if st.checkbox('If metabolite not in KEGG or MetaNetX'):
+    if st.checkbox('If metabolite not present in KEGG or MetaNetX'):
             # st.subheader('test')
         add_info = st.text_area('Additional information (id: SMILES):',
                                 '{"N00001":"CC(=O)O"}')
