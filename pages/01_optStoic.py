@@ -143,7 +143,7 @@ def load_model():
 
 @st.cache_data
 def load_dG_val_metanetx():
-    dG_saved_data = json.load(open('./metanetx/data_final/MetaNetX_dG_dict.json'))
+    dG_saved_data = json.load(open('./data/MetaNetX_dG_dict.json'))
     return dG_saved_data
 
 @st.cache_data
@@ -153,32 +153,32 @@ def load_compound_cache():
 
 @st.cache_data
 def load_metab_df():
-    metab_df = pd.read_csv("./metanetx/data_final/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
+    metab_df = pd.read_csv("./data/optStoic/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
     return metab_df
 
 @st.cache_data
 def load_sij_dict():
-    sij_dict = json.load(open("./metanetx/data_final/metanetx_sij_final.json"))
+    sij_dict = json.load(open("./data/optStoic/metanetx_sij_final.json"))
     return sij_dict
 
 @st.cache_data
 def load_metab_detail_dict():
-    metab_detail_dict = json.load(open("./metanetx/data_final/metab_detail_dict_final.json"))
+    metab_detail_dict = json.load(open("./data/optStoic/metab_detail_dict_final.json"))
     return metab_detail_dict
 
 @st.cache_data
 def load_met_2_kegg():
-    met_2_kegg = json.load(open("./metanetx/data_final/met_2_kegg.json"))
+    met_2_kegg = json.load(open("./data/optStoic/met_2_kegg.json"))
     return met_2_kegg
 
 @st.cache_data
 def load_kegg_2_met():
-    kegg_2_met = json.load(open("./metanetx/data_final/kegg_2_met.json"))
+    kegg_2_met = json.load(open("./data/optStoic/kegg_2_met.json"))
     return kegg_2_met
 
 @st.cache_data
 def load_allow_moiety_dict():
-    allow_moiety_dict = json.load(open("./metanetx/data_final/allow_moiety_dict.json"))
+    allow_moiety_dict = json.load(open("./data/optStoic/allow_moiety_dict.json"))
     return allow_moiety_dict
 
 def kegg_hydrogen(atom_bag):
