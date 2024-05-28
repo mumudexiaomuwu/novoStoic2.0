@@ -135,11 +135,16 @@ def load_molsig_rad2():
         open('./data/decompose_vector_ac_r2_py3_indent_modified_manual.json'))
     return molecular_signature_r2
 
-@st.cache_data
+@st.cache_resource
 def load_model():
     filename = './data/models/dGPredictor/M12_model_BR.pkl'
     loaded_model = joblib.load(open(filename, 'rb'))
     return loaded_model
+
+@st.cache_data
+def load_dG_val_metanetx():
+    dG_saved_data = json.load(open('./metanetx/data_final/MetaNetX_dG_dict.json'))
+    return dG_saved_data
 
 @st.cache_data
 def load_compound_cache():
@@ -229,14 +234,15 @@ def count_substructures(radius, molecule):
             smi_count[smi] = 1
     return smi_count
 
-def get_rule(rxn_dict, molsig1, molsig2, novel_decomposed1, novel_decomposed2):
+def get_rule(id, smiles, molsig1, molsig2):
     
-    if novel_decomposed1 != None:
-        for cid in novel_decomposed1:
-            molsig1[cid] = novel_decomposed1[cid]
-    if novel_decomposed2 != None:
-        for cid in novel_decomposed2:
-            molsig2[cid] = novel_decomposed2[cid]
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.RemoveHs(mol)
+    # Chem.RemoveStereochemistry(mol)
+    smi_count = count_substructures(1, mol)
+    smi_count_2 = count_substructures(2,mol)
+    molsig1[id] = smi_count
+    molsig2[id] = smi_count_2
 
     molsigna_df1 = pd.DataFrame.from_dict(molsig1).fillna(0)
     all_mets1 = molsigna_df1.columns.tolist()
@@ -269,16 +275,11 @@ def get_rule(rxn_dict, molsig1, molsig2, novel_decomposed1, novel_decomposed2):
     #     if flag: continue
 
     rule_df1['change'] = 0
-    for met, stoic in rxn_dict.items():
-        if met == "C00080" or met == "C00282":
-            continue  # hydogen is zero
-        rule_df1['change'] += molsigna_df1[met] * stoic
+    rule_df1['change'] = molsigna_df1[id] * 1
 
     rule_df2['change'] = 0
-    for met, stoic in rxn_dict.items():
-        if met == "C00080" or met == "C00282":
-            continue  # hydogen is zero
-        rule_df2['change'] += molsigna_df2[met] * stoic
+    
+    rule_df2['change'] += molsigna_df2[id] * 1
 
     rule_vec1 = rule_df1.to_numpy().T
     rule_vec2 = rule_df2.to_numpy().T
@@ -316,11 +317,10 @@ def get_alt_mean(loaded_model):
     #print("Manually calculated mean = ",final_ymean)
     return list(alt_ymean)
 
-def get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2, novel_mets):
-
+def get_dG0(id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_mets, met_2_kegg):
+    #Novel mets is a dictionary with novel molecule id and smiles
     # rule_df = get_rxn_rule(rid)
-    rule_comb, rule_df1, rule_df2 = get_rule(
-        rxn_dict, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2)
+    rule_comb, rule_df1, rule_df2 = get_rule(id, smiles, molsig_r1, molsig_r2)
 
     X = rule_comb
 
@@ -328,22 +328,26 @@ def get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, novel_deco
 
     conf_int = (1.96*ystd[0])/np.sqrt(4001)
 
-    # result['dG0'] = ymean[0] + get_ddG0(rxn_dict, pH, I)
-    # result['standard deviation'] = ystd[0]
+    return ymean[0]+ get_ddG0(id, pH, I, novel_mets, met_2_kegg),  conf_int
 
-    # result_df = pd.DataFrame([result])
-    # result_df.style.hide_index()
-    # return result_df
-    return ymean[0],  conf_int
+def get_ddG0(compound_id, pH, I, novel_mets, met_2_kegg):
+    ccache = CompoundCacher()
+    # ddG0 = get_transform_ddG0(rxn_dict, ccache, pH, I, T)
+    T = 298.15
+    ddG0_forward = 0
+    if novel_mets != None and compound_id in novel_mets:
+        if compound_id in met_2_kegg:
+            comp = ccache.get_compound(compound_id)
+        else:
+            comp = novel_mets[compound_id]
+    ddG0_forward += 1 * comp.transform_pH7(pH, I, T)
+
+    return ddG0_forward
 
 def get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2):
     #rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2, novel_mets
     mu, std = get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, [], [], [])
-
-    
     return mu,std
-
-    
 
 def optimal_stoic(reactant,product,add_info):
     substrate = reactant # glucose
@@ -379,15 +383,12 @@ def optimal_stoic(reactant,product,add_info):
 
     
     
-    sij_dict = load_sij_dict()
+    #sij_dict = load_sij_dict()
     metab_detail_dict = load_metab_detail_dict()
-    #st.write(" metab_detail_dict = ", metab_detail_dict)
-    #st.write("type of metab_detail_dict = ", type(metab_detail_dict))
-    #st.write("len of metab_detail_dict = ", len(metab_detail_dict))
     met_2_kegg = load_met_2_kegg()
     kegg_2_met = load_kegg_2_met()
-    allow_moiety_dict = load_allow_moiety_dict()
-    rxns = list(sij_dict.keys())
+    #allow_moiety_dict = load_allow_moiety_dict()
+    #rxns = list(sij_dict.keys())
     mets = list(metab_detail_dict.keys())
     elems = list(metab_detail_dict['MNXM8'].keys())
 
@@ -415,62 +416,41 @@ def optimal_stoic(reactant,product,add_info):
     lp_prob = pulp.LpProblem("Objective_problem", pulp.LpMaximize)
     lp_prob += stoi_vars[pdt[0]]
 
-    #_____Getting mean dG ousing the stoichiometry variables
+    #_____Getting mean dG using the stoichiometry variables
     metab_df_smiles = metab_df['SMILES'].to_dict()
     metab_df_inchi = metab_df['InChI'].to_dict()
     metab_df_name = metab_df['Name'].to_dict()
-
-    dG_expression = np.zeros(26404)
-    dG_expression = list(dG_expression)
-    #rxn_dict, add_info, rid, pH, I, loaded_model, molsig_r1, molsig_r2
-    #st.write("After adding substrate and product => Allow = ", allow)
+    #ADD a line here to integerate dG values of all metanetx molecules
+    dG_values_metanetx = load_dG_val_metanetx()
+    #st.write(dG_values_metanetx)
+    #st.write(allow)
     for id in allow:
-        if id not in allow_moiety_dict:
+        if id in dG_values_metanetx:
             flag = 0
+            
+        else:
+            novel_mets = {}
             smiles = 'nothing'
-            if id not in met_2_kegg:
-                #st.write(id)
-                if 'MNXM' in id:
-                    smiles = metab_df_smiles[id]
-                else:
-                    smiles = add_info[id]
-                temp_dict = {id:1}
-                flag = 1
+            st.write("id NOT in saved dg_values")
+            st.write(id)
+            #st.write(dG_values_metanetx[id])
+            st.write("---------------")
+            if 'MNXM' in id or 'WATER' in id:
+                smiles = metab_df_smiles[id]
+                flag = 2 # this flag represents id is in metanetx but not in dG_values_metanetx
             else:
-                temp_dict = {met_2_kegg[id]:1}
-                if met_2_kegg[id] not in db_smiles:
-                    smiles = metab_df_smiles[id]
-                    flag = 2
-                    #st.write("This Kegg ID & smiles is not in the database = " + met_2_kegg[id])
-            if smiles!='nothing':
-                mol = Chem.MolFromSmiles(smiles)
-                mol = Chem.RemoveHs(mol)
-                # Chem.RemoveStereochemistry(mol)
-                smi_count = count_substructures(1, mol)
-                smi_count_2 = count_substructures(2,mol)
+                smiles = add_info[id]
+            temp_dict = {id:1}
+            flag = 1 #this flag represents id is a novel molecule not in metanetx database
+            if flag>0:
                 if flag==1:
                     if id not in metab_detail_dict:
                         metab_detail_dict[id] = extract_det(smiles)
-                    #metab_detail_dict
-                    molsig_r1[id] = smi_count
-                    molsig_r2[id] = smi_count_2
-                    #st.write(id + " smiles = " + smiles)
-                if flag==2:
-                    molsig_r1[met_2_kegg[id]] = smi_count
-                    molsig_r2[met_2_kegg[id]] = smi_count_2
-                    #st.write(met_2_kegg[id] + " smiles = " + smiles)
-            
-            rule_comb, rule_df1, rule_df2 = get_rule(
-                temp_dict, molsig_r1, molsig_r2, [], [])
-            rule_comb = rule_comb[0]
-            rule_comb = list(rule_comb)
-            allow_moiety_dict[id] = rule_comb
-        for ind,x in enumerate(dG_expression):
-            dG_expression[ind] += stoi_vars[id]*allow_moiety_dict[id][ind]
-            
-    alt_ymean = get_alt_mean(loaded_model)
+                novel_mets[id] = smiles
+                dG_values_metanetx[id], st_id = get_dG0(id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_mets, met_2_kegg)
+
+    dG_sum = pulp.lpSum([dG_values_metanetx[id]*stoi_vars[id] for id in allow])
     
-    dG_sum = sum([a*b for a,b in zip(dG_expression,alt_ymean)])
     lp_prob += dG_sum <= 5.0, "dG_constraint"
     for j in elems:
         lp_prob += pulp.lpSum([stoi_vars[i]*metab_detail_dict[i][j] for i in allow]) == 0
@@ -579,19 +559,14 @@ def optimal_stoic(reactant,product,add_info):
                 #st.write(str(id)+" = "+ str(stoi_vars[id].varValue)+" and "+ str(bin_vars[id].varValue))
                 #id = str(v.name).split('_')[1]
                 soln_dict[id]=stoi_vars[id].varValue
-                if id in met_2_kegg:
-                    rxn_dict[met_2_kegg[id]] = round(soln_dict[id])
-                else:
-                    rxn_dict[id] = round(soln_dict[id])
+                rxn_dict[id] = round(soln_dict[id])
                         
                     
                 int_cut_ids.append(id)
                 int_cut_vals.append(bin_vars[id].varValue)
                 #st.write('\n')
-        rid=pdt[0]
-        pH=7.0
-        I=0.1
-        dG_val_mean, dG_val_std = get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2)
+        # Calculated the mean dG_value of the found overall stoichiometry
+        dG_val_mean = sum([dG_values_metanetx[id]*rxn_dict[id] for id in rxn_dict])
 
         #if dG_val_mean <= 5.0
         st.write("Theoretical yield = {}\n".format(obj))
@@ -685,8 +660,8 @@ def optimal_stoic(reactant,product,add_info):
         to_print_sol_met = to_print_sol_met[:-2]
         
 
-        dG_print = 'dG range = '+str(round(dG_val_mean))+ ' ± '+ str(round(dG_val_std))+' kJ/mol\n'
-        st.write('dG range = '+str(round(dG_val_mean))+ ' ± '+ str(round(dG_val_std))+' kJ/mol')
+        dG_print = 'Mean dG value  = '+str(round(dG_val_mean))+' kJ/mol\n'
+        st.write('Mean dG value  = '+str(round(dG_val_mean))+' kJ/mol')
 
         file_kegg.write(dG_print)
         file_met.write(dG_print)
@@ -700,9 +675,9 @@ def optimal_stoic(reactant,product,add_info):
         with st.container(border=True):
             #st.write("Actual hydrogen = ", temp_val_float)
             st.markdown(to_print_sol[:-2])
+        with st.container(border=True):
+            st.markdown(to_print_sol_met)
 
-
-       
         #st.write(to_print_sol)       
         st.write('---------------------------------------------\n')
     
