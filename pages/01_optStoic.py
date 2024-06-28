@@ -143,7 +143,7 @@ def load_model():
 
 @st.cache_data
 def load_dG_val_metanetx():
-    dG_saved_data = json.load(open('./data/MetaNetX_dG_dict.json'))
+    dG_saved_data = json.load(open('./metanetx/data_final/MetaNetX_dG_dict.json'))
     return dG_saved_data
 
 @st.cache_data
@@ -153,33 +153,71 @@ def load_compound_cache():
 
 @st.cache_data
 def load_metab_df():
-    metab_df = pd.read_csv("./data/optStoic/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
+    metab_df = pd.read_csv("./metanetx/data_final/metanetx_metab_db_noduplicates.csv" , index_col = "Unnamed: 0")
     return metab_df
 
 @st.cache_data
 def load_sij_dict():
-    sij_dict = json.load(open("./data/optStoic/metanetx_sij_final.json"))
+    sij_dict = json.load(open("./metanetx/data_final/metanetx_sij_final.json"))
     return sij_dict
 
 @st.cache_data
 def load_metab_detail_dict():
-    metab_detail_dict = json.load(open("./data/optStoic/metab_detail_dict_final.json"))
+    metab_detail_dict = json.load(open("./metanetx/data_final/metab_detail_dict_final.json"))
     return metab_detail_dict
 
 @st.cache_data
 def load_met_2_kegg():
-    met_2_kegg = json.load(open("./data/optStoic/met_2_kegg.json"))
+    met_2_kegg = json.load(open("./metanetx/data_final/met_2_kegg.json"))
     return met_2_kegg
 
 @st.cache_data
 def load_kegg_2_met():
-    kegg_2_met = json.load(open("./data/optStoic/kegg_2_met.json"))
+    kegg_2_met = json.load(open("./metanetx/data_final/kegg_2_met.json"))
     return kegg_2_met
 
 @st.cache_data
 def load_allow_moiety_dict():
-    allow_moiety_dict = json.load(open("./data/optStoic/allow_moiety_dict.json"))
+    allow_moiety_dict = json.load(open("./metanetx/data_final/allow_moiety_dict.json"))
     return allow_moiety_dict
+
+def parse_novel_molecule(add_info):
+    result = {}
+    for cid, InChI in add_info.items():
+        c = Compound.from_inchi('Test', cid, InChI)
+        result[cid] = c
+    return result
+
+
+def parse_novel_smiles(result):
+    novel_smiles = {}
+    for cid, c in result.items():
+        smiles = c.smiles_pH7
+        novel_smiles[cid] = smiles
+    return novel_smiles
+
+def decompse_novel_mets_rad1(novel_smiles, radius=1):
+    decompose_vector = dict()
+
+    for cid, smiles_pH7 in novel_smiles.items():
+        mol = Chem.MolFromSmiles(smiles_pH7)
+        mol = Chem.RemoveHs(mol)
+        # Chem.RemoveStereochemistry(mol)
+        smi_count = count_substructures(radius, mol)
+        decompose_vector[cid] = smi_count
+    return decompose_vector
+
+
+def decompse_novel_mets_rad2(novel_smiles, radius=2):
+    decompose_vector = dict()
+
+    for cid, smiles_pH7 in novel_smiles.items():
+        mol = Chem.MolFromSmiles(smiles_pH7)
+        mol = Chem.RemoveHs(mol)
+        # Chem.RemoveStereochemistry(mol)
+        smi_count = count_substructures(radius, mol)
+        decompose_vector[cid] = smi_count
+    return decompose_vector
 
 def kegg_hydrogen(atom_bag):
     p = atom_bag
@@ -234,15 +272,14 @@ def count_substructures(radius, molecule):
             smi_count[smi] = 1
     return smi_count
 
-def get_rule(id, smiles, molsig1, molsig2):
+def get_rule(id, molsig1, molsig2, novel_decomposed1, novel_decomposed2):
     
-    mol = Chem.MolFromSmiles(smiles)
-    mol = Chem.RemoveHs(mol)
-    # Chem.RemoveStereochemistry(mol)
-    smi_count = count_substructures(1, mol)
-    smi_count_2 = count_substructures(2,mol)
-    molsig1[id] = smi_count
-    molsig2[id] = smi_count_2
+    if novel_decomposed1 != None:
+        for cid in novel_decomposed1:
+            molsig1[cid] = novel_decomposed1[cid]
+    if novel_decomposed2 != None:
+        for cid in novel_decomposed2:
+            molsig2[cid] = novel_decomposed2[cid]
 
     molsigna_df1 = pd.DataFrame.from_dict(molsig1).fillna(0)
     all_mets1 = molsigna_df1.columns.tolist()
@@ -317,10 +354,10 @@ def get_alt_mean(loaded_model):
     #print("Manually calculated mean = ",final_ymean)
     return list(alt_ymean)
 
-def get_dG0(id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_mets, met_2_kegg):
+def get_dG0(id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2, novel_mets, met_2_kegg):
     #Novel mets is a dictionary with novel molecule id and smiles
     # rule_df = get_rxn_rule(rid)
-    rule_comb, rule_df1, rule_df2 = get_rule(id, smiles, molsig_r1, molsig_r2)
+    rule_comb, rule_df1, rule_df2 = get_rule(id, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2)
 
     X = rule_comb
 
@@ -328,19 +365,20 @@ def get_dG0(id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_mets, m
 
     conf_int = (1.96*ystd[0])/np.sqrt(4001)
 
-    return ymean[0]+ get_ddG0(id, pH, I, novel_mets, met_2_kegg),  conf_int
+    return ymean[0]+ get_ddG0({id:1}, pH, I, novel_mets),  conf_int
 
-def get_ddG0(compound_id, pH, I, novel_mets, met_2_kegg):
+def get_ddG0(rxn_dict, pH, I, novel_mets):
     ccache = CompoundCacher()
     # ddG0 = get_transform_ddG0(rxn_dict, ccache, pH, I, T)
+    #rxn_dict = {id:1}
     T = 298.15
     ddG0_forward = 0
-    if novel_mets != None and compound_id in novel_mets:
-        if compound_id in met_2_kegg:
-            comp = ccache.get_compound(compound_id)
-        else:
+    for compound_id, coeff in rxn_dict.items():
+        if novel_mets != None and compound_id in novel_mets:
             comp = novel_mets[compound_id]
-    ddG0_forward += 1 * comp.transform_pH7(pH, I, T)
+        else:
+            comp = ccache.get_compound(compound_id)
+        ddG0_forward += coeff * comp.transform_pH7(pH, I, T)
 
     return ddG0_forward
 
@@ -349,7 +387,7 @@ def get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2):
     mu, std = get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, [], [], [])
     return mu,std
 
-def optimal_stoic(reactant,product,add_info):
+def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
     substrate = reactant # glucose
     pdt = [product] #acetate
     allow = ['WATER','MNXM3','MNXM8','MNXM10','MNXM738702','MNXM5','MNXM735438','MNXM40333','MNXM9','MNXM727276','MNXM13','MNXM1','MNXM1108018','MNXM728294','MNXM11','MNXM729302','MNXM732620']
@@ -411,7 +449,7 @@ def optimal_stoic(reactant,product,add_info):
     allow.append(substrate)
     allow.append(pdt[0])
     #### Optimization problem starts
-    stoi_vars = pulp.LpVariable.dicts("stoichiometry", allow, lowBound=-5, upBound=5, cat='Integer')
+    stoi_vars = pulp.LpVariable.dicts("stoichiometry", allow, lowBound=min_int_val, upBound=max_int_val, cat='Integer')
     bin_vars = pulp.LpVariable.dicts("active",allow,lowBound=0, upBound=1, cat='Binary')
     lp_prob = pulp.LpProblem("Objective_problem", pulp.LpMaximize)
     lp_prob += stoi_vars[pdt[0]]
@@ -436,18 +474,37 @@ def optimal_stoic(reactant,product,add_info):
             #st.write(dG_values_metanetx[id])
             st.write("---------------")
             if 'MNXM' in id or 'WATER' in id:
-                smiles = metab_df_smiles[id]
+                #smiles = metab_df_smiles[id]
+                smiles = metab_df_inchi[id]
+                st.write(id)
+                st.write(metab_df_inchi[id])
                 flag = 2 # this flag represents id is in metanetx but not in dG_values_metanetx
             else:
                 smiles = add_info[id]
-            temp_dict = {id:1}
-            flag = 1 #this flag represents id is a novel molecule not in metanetx database
+                temp_dict = {id:1}
+                flag = 1 #this flag represents id is a novel molecule not in metanetx database
+            st.write(flag)
             if flag>0:
                 if flag==1:
                     if id not in metab_detail_dict:
                         metab_detail_dict[id] = extract_det(smiles)
                 novel_mets[id] = smiles
-                dG_values_metanetx[id], st_id = get_dG0(id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_mets, met_2_kegg)
+                try:
+                    json_smiles = {id:smiles}
+                    novel_mets = parse_novel_molecule(json_smiles)
+                    #st.write(novel_mets)
+                    novel_smiles = parse_novel_smiles(novel_mets)
+                    novel_decomposed_r1 = decompse_novel_mets_rad1(novel_smiles)
+                    novel_decomposed_r2 = decompse_novel_mets_rad2(novel_smiles)
+
+                except Exception as e:
+                    novel_mets = None
+                    novel_smiles = None
+                    novel_decomposed_r1 = None
+                    novel_decomposed_r2 = None
+                    
+                dG_values_metanetx[id], st_id = get_dG0(id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2, novel_mets, met_2_kegg)
+                #id, pH, I, smiles, loaded_model, molsig_r1, molsig_r2, novel_decomposed_r1, novel_decomposed_r2, novel_mets, met_2_kegg
 
     dG_sum = pulp.lpSum([dG_values_metanetx[id]*stoi_vars[id] for id in allow])
     
@@ -752,12 +809,15 @@ def main():
         add_info = json.loads(add_info)
     else:
         add_info = {}
+
+    min_int_val = st.number_input("Set lower bound for stoichiometry values", value = -5)
+    max_int_val = st.number_input("Set upper bound for stoichiometry values", value = 5)
     
     if st.button("Search"):
         # if session_state.button_search:
         st.subheader('Calculating optimal stoichiometry')
         st.write(reactant+" => "+ product)
-        optimal_stoic(reactant,product,add_info)
+        optimal_stoic(reactant,product,add_info, min_int_val, max_int_val)
 
 if __name__ == '__main__':
     main()
