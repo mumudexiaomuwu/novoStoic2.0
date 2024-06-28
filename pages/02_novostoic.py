@@ -19,6 +19,7 @@ import sys
 import pulp
 import os
 import pdb
+import datetime
 
 def count_substructures(radius, molecule):
     """Helper function for get the information of molecular signature of a
@@ -65,7 +66,7 @@ def count_substructures(radius, molecule):
 
 def parse_reaction_formula_side(s):
     """
-        Parses the side formula, e.g. '2 C00001 + C00002 + 3 C00003'
+        Parses the side formula, e.g. '2 MNXM001 + MNXM002 + 3 MNXM003'
         Ignores stoichiometry.
 
         Returns:
@@ -93,7 +94,7 @@ def parse_reaction_formula_side(s):
 
 def parse_formula(formula, arrow='<=>', rid=None):
     """
-        Parses a two-sided formula such as: 2 C00001 => C00002 + C00003
+        Parses a two-sided formula such as: 2 MNXM0001 => MNXM002 + MNXM0003
 
         Return:
             The set of substrates, products and the direction of the reaction
@@ -131,7 +132,7 @@ def draw_rxn_figure(rxn_dict, db_smiles, novel_smiles):
     right = ''
 
     for met, stoic in rxn_dict.items():
-        if met == "C00080" or met == "C00282":
+        if met == "MNXM1" or met == "MNXM1108018":
             continue  # hydogen is not considered
         if stoic > 0:
             if met in db_smiles:
@@ -188,17 +189,17 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
         os.makedirs(project)
 
     # the maximum flux of a reaction
-    M = 2
+    M = 10
 
-    data_dir = './data'
+    data_dir = './metanetx/data_final/SMILES_moieties/'
 
     # read csv files with molecular signatures and reaction rules
     molecular_signature = json.load(open(
-        os.path.join(data_dir, 'decompose_vector_ac.json')))
+        os.path.join(data_dir, 'molsig_metanetx.json')))
     molsigs = pd.DataFrame.from_dict(molecular_signature).fillna(0)
 
     rules = pd.read_csv(
-        os.path.join(data_dir, "relaxed_rule_noduplic.csv"), index_col=0
+        os.path.join(data_dir, "reaction_rule_metanetx_nodup.csv"), index_col=0
     )
 
     ###### sets ############
@@ -217,8 +218,8 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
     # C(m,i) contains moiety cardinality for each metabolite
     C = molsigs.to_dict(orient="index")
     for m in moiety_index:
-        C[m]["C00080"] = 0
-        C[m]["C00282"] = 0
+        C[m]["MNXM1"] = 0
+        C[m]["MNXN1108018"] = 0
 
     # add metabolites that are not present in current database
     #st.write('-----testing something')
@@ -273,16 +274,16 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
 
     # constraint 3: control the number of rules
 
-    direction_df = pd.read_csv(
-        os.path.join(data_dir, "direction.csv"), index_col=0
-    )
-    direction_df.index = direction_df['reaction']
+    # direction_df = pd.read_csv(
+    #     os.path.join(data_dir, "direction.csv"), index_col=0
+    # )
+    # direction_df.index = direction_df['reaction']
 
-    # direction: 0-reversible, 1-backward, 2-forward
-    direction = direction_df['direction'].to_dict()
+    # # direction: 0-reversible, 1-backward, 2-forward
+    # direction = direction_df['direction'].to_dict()
 
     if use_direction:
-        soln_file = os.path.join(project, "solution_use_direction.txt")
+        solu_file = os.path.join(project, "solution_use_direction_" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + ".txt")
         for j in rules_index:
             if direction[j] == 0:
                 lp_prob += v_rule[j] >= y_rule[j] * -M, "cons1_%s" % j
@@ -294,7 +295,9 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
                 lp_prob += v_rule[j] >= 0, "cons1_%s" % j
                 lp_prob += v_rule[j] <= y_rule[j] * M, "cons2_%s" % j
     else:
-        soln_file = os.path.join(project, "solution_no_direction.txt")
+        # solu_file = os.path.join(project, "solution_no_direction.txt")
+        solu_file = os.path.join(project, "solution_use_direction_" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + ".txt")
+        
         for j in rules_index:
             lp_prob += v_rule[j] >= y_rule[j] * -M, "cons1_%s" % j
             lp_prob += v_rule[j] <= y_rule[j] * M, "cons2_%s" % j
@@ -302,6 +305,169 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
     for j in rules_index:
         lp_prob += v_rule_obj[j] >= v_rule[j]
         lp_prob += v_rule_obj[j] >= -v_rule[j]
+
+    # constraint 5: customized constraints
+    # the number of steps of the pathway
+    lp_prob += pulp.lpSum([v_rule_obj[j] for j in rules_index]) == n_steps
+
+    # solve
+    integer_cuts(lp_prob, pulp_solver, iterations, rules_index,
+                 y_rule, v_rule, solu_file, direction = [])
+
+def novoStoic_minRxn_moietyRule(exchange_mets, novel_mets, project, iterations, n_steps, pulp_solver, use_direction):
+    """apply reaction rules generated from a more relaxed manner to search for
+    reaction rules that are able to fill the gap between the source and sink
+    metabolites.
+    - rePrime procedure is more similar to a morgan fingerprints
+    - the relaxed rule is generated from substructures without considering the
+      bond that connect the atoms at the edge of the substructure to the rest
+      of the molecules
+
+    Parameters
+    ----------
+    exchange_mets : dict
+        overall stoichiometry of source and sink metabolites, {met: stoic,...}
+        This is a important input for novoStoic to run correctly because the
+        method requires that overall moieties are balanced.
+    novel_mets : list
+        list of novel metabolites that are not in the database (novoStoic/data/
+        metanetx_universal_model_kegg_metacyc_rhea_seed_reactome.json)
+    filtered_rules : list
+        list of rules that are filtered by the user (based on expert knowldedge)
+        to reduce the running time of the novoStoic search process
+    project : string
+        a path to store the tmp information of result from running novoStoic
+    iterations : int
+        the number of iterations of searching for alternative solutions
+    data_dir : type
+        Description of parameter `data_dir`.
+
+    Returns
+    -------
+    None
+        all the outputs are saved in the project folder.
+
+    """
+    if not os.path.exists(project):
+        os.makedirs(project)
+
+    # the maximum flux of a reaction
+    M = 10
+
+    data_dir = './data'
+
+    # read csv files with molecular signatures and reaction rules
+    molecular_signature = json.load(open(
+        os.path.join(data_dir, 'decompose_vector_ac.json')))
+    molsigs = pd.DataFrame.from_dict(molecular_signature).fillna(0)
+
+    rules = pd.read_csv(
+        os.path.join(data_dir, "relaxed_rule_noduplic.csv"), index_col=0
+    )
+
+    molsigs = molsigs.reindex(rules.index)
+
+    ###### sets ############
+    moiety_index = rules.index.tolist()  # moiety sets
+    rules_index = rules.columns.values.tolist()
+    st.write("Number of unique rules used in this search:", len(rules_index))
+
+
+
+    exchange_index = exchange_mets.keys()
+
+    ###### parameters ######
+    # T(m,r) contains atom stoichiometry for each rule
+    T = rules.to_dict(orient="index")
+
+    # C(m,i) contains moiety cardinality for each metabolite
+    C = molsigs.to_dict(orient="index")
+    for m in moiety_index:
+        C[m]["MNXM1"] = 0
+        C[m]["MNXM1108018"] = 0
+
+    # add metabolites that are not present in current database
+    #st.write('-----testing something')
+    #st.write(novel_mets)
+#     pdb.set_trace()
+    for met in novel_mets:
+        smiles = novel_mets[met]
+        mol = Chem.MolFromSmiles(smiles)
+        mol = Chem.RemoveHs(mol)
+        molsigs_product_dict = count_substructures(1, mol)
+
+        for m in moiety_index:
+            if m in molsigs_product_dict.keys():
+                C[m][met] = molsigs_product_dict[m]
+            else:
+                C[m][met] = 0
+
+    ###### variables ######
+    v_rule = pulp.LpVariable.dicts(
+        "v_rule", rules_index, lowBound=-M, upBound=M, cat="Integer"
+    )
+    v_rule_obj = pulp.LpVariable.dicts(
+        "v_rule_obj", rules_index, lowBound=0, upBound=M, cat="Continuous"
+    )
+
+    v_EX = pulp.LpVariable.dicts(
+        "v_EX", exchange_index, lowBound=-M, upBound=M, cat="Continuous"
+    )
+    y_rule = pulp.LpVariable.dicts(
+        "y", rules_index, lowBound=0, upBound=1, cat="Binary"
+    )
+
+    # create MILP problem
+    lp_prob = pulp.LpProblem("novoStoic", pulp.LpMinimize)
+
+    ####### objective function ####
+    lp_prob += pulp.lpSum([y_rule[j] for j in rules_index])
+
+    ####### constraints ####
+    # constraint 1: moiety change balance
+    for m in moiety_index:
+        lp_prob += (
+            pulp.lpSum([T[m][r] * v_rule[r]
+                       for r in rules_index if T[m][r] != 0])
+            == pulp.lpSum([C[m][i] * v_EX[i] for i in exchange_index if C[m][i] != 0]),
+            "moiety_balance_" + str(moiety_index.index(m)),
+        )
+
+    # constraint 2: constraint for exchange reactions
+    for i, stoic in exchange_mets.items():
+        lp_prob += v_EX[i] == stoic, "exchange" + i
+
+    # constraint 3: control the number of rules
+
+    direction_df = pd.read_csv(
+        os.path.join(data_dir, "direction.csv"), index_col=0
+    )
+    direction_df.index = direction_df['reaction']
+
+    # direction: 0-reversible, 1-backward, 2-forward
+    direction = direction_df['direction'].to_dict()
+
+    if use_direction:
+        soln_file = os.path.join(project, "solution_use_direction'+ datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.txt")
+        for j in rules_index:
+            if direction[j] == 0:
+                lp_prob += v_rule[j] >= y_rule[j] * -M, "cons1_%s" % j
+                lp_prob += v_rule[j] <= y_rule[j] * M, "cons2_%s" % j
+            if direction[j] == 1:
+                lp_prob += v_rule[j] >= y_rule[j] * -M, "cons1_%s" % j
+                lp_prob += v_rule[j] <= 0, "cons2_%s" % j
+            if direction[j] == 2:
+                lp_prob += v_rule[j] >= 0, "cons1_%s" % j
+                lp_prob += v_rule[j] <= y_rule[j] * M, "cons2_%s" % j
+    else:
+        soln_file = os.path.join(project, "solution_no_direction'+ datetime.datetime.now().strftime('%Y%m%d_%H%M%S') +'.txt")
+        for j in rules_index:
+            lp_prob += v_rule[j] >= y_rule[j] * -M, "cons1_%s" % j
+            lp_prob += v_rule[j] <= y_rule[j] * M, "cons2_%s" % j
+
+    # for j in rules_index:
+    #     lp_prob += v_rule_obj[j] >= v_rule[j]
+    #     lp_prob += v_rule_obj[j] >= -v_rule[j]
 
     # constraint 5: customized constraints
     # the number of steps of the pathway
@@ -353,17 +519,17 @@ def integer_cuts(lp_prob, pulp_solver, iterations, rules_index, y_rule, v_rule, 
         for r in rules_index:
             if (v_rule[r].varValue >= 0.1 or v_rule[r].varValue <= -0.1):
 
-                dG_info = ''
-                if (v_rule[r].varValue > 0 and direction[r] == 1) or (v_rule[r].varValue < 0 and direction[r] == 2):
-                    dG_info = ' * Thermodynamically infeasible'
-                    st.write("##### Found ####: " + str(r) + dG_info)
+                # dG_info = ''
+                # if (v_rule[r].varValue > 0 and direction[r] == 1) or (v_rule[r].varValue < 0 and direction[r] == 2):
+                #     dG_info = ' * Thermodynamically infeasible'
+                #     st.write("##### Found ####: " + str(r) + dG_info)
                 integer_cut_rules.append(r)
                 #st.write(r, v_rule[r].varValue)
 
-                st.write(r + ',' + str(v_rule[r].varValue) + dG_info + '\n')
+                st.write(r + ',' + str(v_rule[r].varValue) + '\n')
 
                 with open(soln_file, 'a') as f:
-                    f.write(r + ',' + str(v_rule[r].varValue) + dG_info)
+                    f.write(r + ',' + str(v_rule[r].varValue))
                     f.write('\n')
 
         length = len(integer_cut_rules) - 1
@@ -377,23 +543,24 @@ def main():
     st.image('./data/header_image/novoStoic_header.png')
     st.subheader('Overall Stoichiometric Equation')
     stoic = st.text_input('Enter the pathway stoichiometry here',
-                          value='1 C00141 + 1 C00004 <=> 1 C00003 + 1 C14710 + 1 C00011')
+                          value='1 MNXM732866 + 1 MNXM10 <=> 1 MNXM8 + 1 MNXM5188 + 1 MNXM13')
 
     if st.checkbox('Reaction has metabolites not in database'):
         add_info = st.text_area('Additional information (id: SMILES):',
                                 '{"14bdo":"OCCCCO"}')
     else:
 #         add_info = '{"None":"None"}'
-        add_info = ''
+        add_info = '{}'
 
     col1, col2 = st.columns(2)
 
     with col1:
         #st.subheader('Primary Product')
-        p_prod = st.text_input('Enter primary product: ', value='C14710')
+        p_subs = st.text_input('Enter primary substrate: ', value='MNXM732866')
 
         with col2:
-            p_subs = st.text_input('Enter primary substrate: ', value='C00141')
+            p_prod = st.text_input('Enter primary product: ', value='MNXM5188')
+            
 
         st.subheader('Pathway design parameters:')
     max_steps = st.slider('Maximum number of steps',
@@ -405,8 +572,13 @@ def main():
         with st.spinner('Searching...'):
             try:
                 novel_metab = json.loads(add_info)
+                # st.write("parsed novel mets: ", novel_metab)
+                # st.write(len(novel_metab))
             except Exception as e:
                 novel_metab = {}
+                st.write('Error parsing novel metabolites: ', e)
+                st.write(len(novel_metab))
+
 
 #             sst.write(novel_metab)
 
@@ -418,6 +590,8 @@ def main():
         use_direction = False
         novoStoic_minFlux_relaxedRule(
             rxn_dict, novel_metab, save_sol_folder, int(iterations), int(max_steps), pulp_solver, use_direction)
+        # novoStoic_minRxn_moietyRule(
+        #     rxn_dict, novel_metab, save_sol_folder, int(iterations), int(max_steps), pulp_solver, use_direction)
 
 
 if __name__ == '__main__':
