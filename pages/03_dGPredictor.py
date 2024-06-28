@@ -295,6 +295,7 @@ def get_rule(rxn_dict, molsig1, molsig2, novel_decomposed1, novel_decomposed2):
 
     rule_df1['change'] = 0
     for met, stoic in rxn_dict.items():
+        st.write(met)
         if met == "C00080" or met == "C00282":
             continue  # hydogen is zero
         rule_df1['change'] += molsigna_df1[met] * stoic
@@ -439,6 +440,7 @@ def main():
         with st.spinner('Searching...'):
             try:
                 novel_mets = parse_novel_molecule(json.loads(add_info))
+                #st.write(novel_mets)
                 novel_smiles = parse_novel_smiles(novel_mets)
                 novel_decomposed_r1 = decompse_novel_mets_rad1(novel_smiles)
                 novel_decomposed_r2 = decompse_novel_mets_rad2(novel_smiles)
@@ -449,11 +451,10 @@ def main():
                 novel_decomposed_r1 = None
                 novel_decomposed_r2 = None
             # novel_smiles = json.loads(add_info)
-            print(novel_smiles)
+            st.write(novel_smiles)
 
             rxn_dict = parse_formula(rxn_str)
-            st.image(draw_rxn_figure(rxn_dict, db_smiles,
-                     novel_smiles), use_column_width=True)
+            #st.image(draw_rxn_figure(rxn_dict, db_smiles,novel_smiles), use_column_width=True)
 
         # st.text('Group changes:')
         # st.write(parse_rule('R03921'))
