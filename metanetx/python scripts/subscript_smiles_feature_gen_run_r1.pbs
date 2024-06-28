@@ -1,0 +1,22 @@
+#!/bin/bash
+#PBS -l nodes=4:ppn=20
+#PBS -l walltime=50:00:00
+#PBS -l pmem=32gb
+#PBS -A cdm8_b_g_sc_default
+#PBS j oe
+#PBS -M vuu10@psu.edu
+# Get started
+
+module load anaconda3
+
+# Go to the correct place
+cd $PBS_O_WORKDIR
+# Run the job itself - 
+
+source activate /gpfs/group/cdm8/default/vikas/conda_env/Retrosynthesis
+
+python dG_moiety_gen_rad1.py > log.Smiles_feature_r1
+
+# Finish up 
+echo "Job Ended at 'date'"
+
