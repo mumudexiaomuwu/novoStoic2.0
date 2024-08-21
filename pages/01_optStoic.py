@@ -13,6 +13,7 @@ import ast
 from math import gcd
 import math
 import os
+import time
 sys.path.append("./data/CC/")
 
 import chemaxon
@@ -387,7 +388,7 @@ def get_lower_limit(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2):
     mu, std = get_dG0(rxn_dict, rid, pH, I, loaded_model, molsig_r1, molsig_r2, [], [], [])
     return mu,std
 
-def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
+def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val,ATP_input):
     substrate = reactant # glucose
     pdt = [product] #acetate
     allow = ['WATER','MNXM3','MNXM8','MNXM10','MNXM738702','MNXM5','MNXM735438','MNXM40333','MNXM9','MNXM727276','MNXM13','MNXM1','MNXM1108018','MNXM728294','MNXM11','MNXM729302','MNXM732620']
@@ -412,13 +413,17 @@ def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
     separate = ['MNXM3']
     #[NADH, NAD+], [NADPH, NADP+], 
     pairs = [['MNXM10','MNXM8'],['MNXM738702','MNXM5']]
-    #[ATP,ADP],[ATP,AMP], [dips,AMP], [phos,ADP]
-    cond_pairs = [['MNXM3', 'MNXM40333'],['MNXM3','MNXM728294'], ['MNXM11','MNXM728294'], ['MNXM9','MNXM40333']]
+    #[dips,AMP], [phos,ADP]
+    cond_pairs_together = [['MNXM11','MNXM728294'], ['MNXM9','MNXM40333']]
+    #[ATP,ADP],[ATP,AMP],
+    cond_pairs_opposite = [['MNXM3', 'MNXM40333'],['MNXM3','MNXM728294']]
     #['MNXM1','MNXM8'], ['MNXM1','MNXM5']
     #[H+,NAD+], [H+,NADP+]
     #[ATP,ADP,AMP]
     cond_threes = [['MNXM3', 'MNXM40333', 'MNXM728294']]
-
+    #[ATP,ADP,phos],[ATP,AMP,dips]
+    #cond_threes_2 = [['MNXM3', 'MNXM40333','MNXM9'],['MNXM3','MNXM728294','MNXM11']]
+    
     
     
     #sij_dict = load_sij_dict()
@@ -516,15 +521,19 @@ def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
     for couple in pairs:
         lp_prob += stoi_vars[couple[0]]+stoi_vars[couple[1]]==0
         lp_prob += bin_vars[couple[0]]-bin_vars[couple[1]]==0
-    
-    for couple in cond_pairs:
-        lp_prob += -10*(1-bin_vars[couple[1]]) <= stoi_vars[couple[0]] + stoi_vars[couple[1]]
-        lp_prob += 10*(1-bin_vars[couple[1]]) >= stoi_vars[couple[0]] + stoi_vars[couple[1]]
+    #[dips,AMP], [phos,ADP]
+    for couple in cond_pairs_together:
+        lp_prob += stoi_vars[couple[0]]-stoi_vars[couple[1]]==0
+        lp_prob += bin_vars[couple[0]]-bin_vars[couple[1]]==0
+        #lp_prob += -10*(1-bin_vars[couple[1]]) <= stoi_vars[couple[0]] + stoi_vars[couple[1]]
+        #lp_prob += 10*(1-bin_vars[couple[1]]) >= stoi_vars[couple[0]] + stoi_vars[couple[1]]
     
     #lp_prob += -10*(1-bin_vars_var
-        
+    #[0]-ATP,[1]-ADP,[2]-AMP    
     for threes in cond_threes:
-        lp_prob += bin_vars[threes[0]]<= bin_vars[threes[1]]+bin_vars[threes[2]] 
+        lp_prob += bin_vars[threes[0]]== bin_vars[threes[1]]+bin_vars[threes[2]]
+        lp_prob += stoi_vars[threes[0]]+stoi_vars[threes[1]]+stoi_vars[threes[2]]==0
+    
     
     #ADP & AMP should simultaneously not appear
     lp_prob += bin_vars['MNXM728294']+bin_vars['MNXM40333'] <= 1
@@ -539,7 +548,9 @@ def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
     #lp_prob += stoi_vars[substrate]==1
     #lp_prob += stoi_vars[pdt[0]]<=math.floor(metab_detail_dict[substrate]['C']/metab_detail_dict[pdt[0]]['C']), 'suboptimal'
 
-    lp_prob += bin_vars['MNXM9']==0, 'phosphate'
+    #lp_prob += bin_vars['MNXM9']==0, 'phosphate'
+    #Getting user input for ATP
+    lp_prob += stoi_vars['MNXM3']==ATP_input, "ATP_input_from_user"
     
     for i in allow:
         lp_prob += bin_vars[i]*10 >= stoi_vars[i]
@@ -558,8 +569,8 @@ def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
     itr = 0
 
     prev_itr=0
-
-    folder_path = './Results/optStoic_solutions/'+pdt[0]+'/int_cut_ids'
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    folder_path = './Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/int_cut_ids'
     #folder_path = os.path.join(os.getcwd(), folder_path)
     
     #st.write(folder_path)
@@ -590,8 +601,8 @@ def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
                
                     
                     
-    file_kegg = open('./Results/optStoic_solutions/'+pdt[0]+'/kegg_solns.txt', 'w')      
-    file_met = open('./Results/optStoic_solutions/'+pdt[0]+'/met_solns.txt', 'w')
+    file_kegg = open('./Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/kegg_solns.txt', 'w')      
+    file_met = open('./Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/met_solns.txt', 'w')
 
 
     while pulp.LpStatus[lp_prob.status] == 'Optimal':
@@ -768,24 +779,24 @@ def optimal_stoic(reactant,product,add_info,min_int_val,max_int_val):
         #lp_prob += (pulp.lpSum([abs(soln_dict_metanetx_id[id]-round(stoi_vars[id])) for id in allow_moiety_dict]) >= 1 , 'integer_cut_stoi_'+str(itr+prev_itr))
         
         
-        with open('./Results/optStoic_solutions/'+pdt[0]+'/int_cut_ids/'+str(itr+prev_itr)+'.txt', 'w') as f:
+        with open('./Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/int_cut_ids/'+str(itr+prev_itr)+'.txt', 'w') as f:
             for line in int_cut_ids:
                 f.write(f"{line}\n")
         
         
         lp_prob.solve(pulp_solver)
-        folder_path = './Results/optStoic_solutions/'+pdt[0]+'/common_name'
+        folder_path = './Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/common_name'
         #folder_path = os.path.join(os.getcwd(), folder_path)
         if not os.path.exists(folder_path): 
             os.makedirs(folder_path)
-        with open('./Results/optStoic_solutions/'+pdt[0]+'/common_name/soln_dict_common_name'+str(itr+prev_itr)+'.json', "w") as outfile: 
+        with open('./Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/common_name/soln_dict_common_name'+str(itr+prev_itr)+'.json', "w") as outfile: 
             json.dump(soln_dict_common_name, outfile, indent=4)
 
-        folder_path = './Results/optStoic_solutions/'+pdt[0]+'/metanetx_id'
+        folder_path = './Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/metanetx_id'
         #folder_path = os.path.join(os.getcwd(), folder_path)
         if not os.path.exists(folder_path): 
             os.makedirs(folder_path)      
-        with open('./Results/optStoic_solutions/'+pdt[0]+'/metanetx_id/soln_dict_metanetx_id'+str(itr+prev_itr)+'.json', "w") as outfile: 
+        with open('./Results/optStoic_solutions/'+pdt[0]+'_'+timestr+'_'+'/metanetx_id/soln_dict_metanetx_id'+str(itr+prev_itr)+'.json', "w") as outfile: 
             json.dump(soln_dict_metanetx_id, outfile, indent=4)
     
          
@@ -812,12 +823,13 @@ def main():
 
     min_int_val = st.number_input("Set lower bound for stoichiometry values", value = -5)
     max_int_val = st.number_input("Set upper bound for stoichiometry values", value = 5)
+    ATP_input = st.number_input("ATP input", value = 0)
     
     if st.button("Search"):
         # if session_state.button_search:
         st.subheader('Calculating optimal stoichiometry')
         st.write(reactant+" => "+ product)
-        optimal_stoic(reactant,product,add_info, min_int_val, max_int_val)
+        optimal_stoic(reactant,product,add_info, min_int_val, max_int_val,ATP_input)
 
 if __name__ == '__main__':
     main()
