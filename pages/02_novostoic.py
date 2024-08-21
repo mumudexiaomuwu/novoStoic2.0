@@ -194,10 +194,11 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
     data_dir = './metanetx/data_final/SMILES_moieties/'
 
     # read csv files with molecular signatures and reaction rules
+    metanetx_metab_db_all = json.load(open('./metanetx/data_final/metanetx_metab_db_all.json'))
     molecular_signature = json.load(open(
         os.path.join(data_dir, 'molsig_metanetx.json')))
     molsigs = pd.DataFrame.from_dict(molecular_signature).fillna(0)
-
+    all_molecules_with_molsig = molsigs.axes[1].to_list()
     rules = pd.read_csv(
         os.path.join(data_dir, "reaction_rule_metanetx_nodup.csv"), index_col=0
     )
@@ -210,6 +211,10 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
 
 
     exchange_index = exchange_mets.keys()
+    #st.write("Exchange mets = ", exchange_mets)
+    #st.write("Type exchange mets = ", type(exchange_mets))
+    #st.write("Exchange index = ",exchange_index)
+    #st.write("Type exchange index = ",type(exchange_index))
 
     ###### parameters ######
     # T(m,r) contains atom stoichiometry for each rule
@@ -217,6 +222,18 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
 
     # C(m,i) contains moiety cardinality for each metabolite
     C = molsigs.to_dict(orient="index")
+    for ex in exchange_mets:
+        if ex not in all_molecules_with_molsig:
+            smiles = metanetx_metab_db_all[ex]['SMILES']
+            mol = Chem.MolFromSmiles(smiles)
+            mol = Chem.RemoveHs(mol)
+            molsigs_product_dict = count_substructures(1, mol)
+        
+            for m in moiety_index:
+                if m in molsigs_product_dict.keys():
+                    C[m][ex] = molsigs_product_dict[m]
+                else:
+                    C[m][ex] = 0
     for m in moiety_index:
         C[m]["MNXM1"] = 0
         C[m]["MNXN1108018"] = 0
@@ -236,6 +253,9 @@ def novoStoic_minFlux_relaxedRule(exchange_mets, novel_mets, project, iterations
                 C[m][met] = molsigs_product_dict[m]
             else:
                 C[m][met] = 0
+                
+    
+    
 
     ###### variables ######
     v_rule = pulp.LpVariable.dicts(
