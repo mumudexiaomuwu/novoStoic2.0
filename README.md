@@ -16,7 +16,7 @@ novoStoic2.0: Integrated Pathway Design Tool with Thermodynamic Considerations a
 11. ChemAxon's Marvin >= 5.11
 12. Openbabel
 
-Refer the file titled "env.yaml" for full list of depedencies
+Refer the file titled _env.yaml_ for full list of depedencies
 
 ## Remaining data can be taken from this oneDrive link [here](https://pennstateoffice365-my.sharepoint.com/personal/vuu10_psu_edu/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fvuu10%5Fpsu%5Fedu%2FDocuments%2Fphd%2F2024%2FnovoStoic2%5Fmetanetx%5Ffinal)
 
