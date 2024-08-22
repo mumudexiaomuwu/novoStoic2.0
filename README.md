@@ -18,7 +18,7 @@ novoStoic2.0: Integrated Pathway Design Tool with Thermodynamic Considerations a
 
 Refer the file titled _env.yaml_ for full list of depedencies
 
-## Remaining data can be taken from this oneDrive link [here](https://pennstateoffice365-my.sharepoint.com/personal/vuu10_psu_edu/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fvuu10%5Fpsu%5Fedu%2FDocuments%2Fphd%2F2024%2FnovoStoic2%5Fmetanetx%5Ffinal)
+## Remaining data can be taken from the scholarsphere psu link [here](https://pennstateoffice365-my.sharepoint.com/personal/vuu10_psu_edu/_layouts/15/onedrive.aspx?ga=1&id=%2Fpersonal%2Fvuu10%5Fpsu%5Fedu%2FDocuments%2Fphd%2F2024%2FnovoStoic2%5Fmetanetx%5Ffinal](https://scholarsphere.psu.edu/resources/a82e671a-cf7f-4609-afdd-a5ade27a4fab)
 
 ## creating conda environment
 - create a conda environment using: `conda create --prefix pathwaydesign`
