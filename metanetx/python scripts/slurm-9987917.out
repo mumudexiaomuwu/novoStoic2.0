@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/storage/group/cdm8/default/vikas/novoStoic2/novoStoic2_v0/metanetx/python scripts/dG_moiety_gen_rad1_cmd_run.py", line 4, in <module>
+    from rdkit import Chem
+  File "/storage/group/cdm8/default/vikas/conda_env/pdes/lib/python3.11/site-packages/rdkit/Chem/__init__.py", line 23, in <module>
+    from rdkit.Chem.rdmolfiles import *
+ImportError: /storage/icds/RISE/sw8/anaconda/anaconda3/lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /storage/group/cdm8/default/vikas/conda_env/pdes/lib/python3.11/site-packages/rdkit/Chem/../../../../libRDKitFileParsers.so.1)
