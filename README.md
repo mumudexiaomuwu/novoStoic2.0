@@ -25,7 +25,7 @@ novoStoic2.0: Integrated Pathway Design Tool with Thermodynamic Considerations a
 Refer the file titled _env.yaml_ for full list of depedencies
 
 ## Remaining data can be taken from the scholarsphere psu link [here](https://doi.org/10.26207/fxd2-se27)
-Due to constraints of file sizes on github, we have published all the data code on shcholar sphere psu.
+Due to constraints of file sizes on github, we have published all the data and codes on shcholar sphere psu.
 
 ## creating conda environment
 - create a conda environment using: `conda create --prefix pathwaydesign`
